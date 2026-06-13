@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>肌力阻力 ＆ 心跳率同步分析系統 (精確動作對期優化版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .control-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .control-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        input, select, button {
+            padding: 8px 12px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-weight: bold;
+        }
+        button:hover { background-color: #2980b9; }
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .nav-btn { background-color: #2ecc71; }
+        .nav-btn:hover { background-color: #27ae60; }
+        .zoom-toggle-btn { background-color: #e67e22; }
+        .zoom-toggle-btn:hover { background-color: #d35400; }
+        .zoom-active { background-color: #9b59b6 !important; }
+        .chart-container {
+            position: relative;
+            height: 650px;
+            width: 100%;
+            margin-bottom: 30px;
+        }
+        #infoBox {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #2c3e50;
+            background-color: #e8f4fd;
+            padding: 10px;
+            border-left: 4px solid #3498db;
+            margin-bottom: 15px;
+            white-space: pre-line;
+        }
+        .analysis-section { margin-top: 30px; }
+        .analysis-title {
+            color: #2c3e50;
+            border-bottom: 2px solid #2ecc71;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+        }
+        .device-card {
+            background: #fdfefe;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .device-card h4 {
+            margin-top: 0;
+            color: #34495e;
+            font-size: 16px;
+            background: #eaeded;
+            padding: 8px 12px;
+            border-radius: 4px;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .comparison-table th, .comparison-table td {
+            border: 1px solid #d5dbdb;
+            padding: 10px;
+            text-align: center;
+        }
+        .comparison-table th {
+            background-color: #f4f6f7;
+            color: #34495e;
+            font-weight: bold;
+        }
+        .comparison-table tr:nth-child(even) { background-color: #fcfcfc; }
+        .highlight-hr  { color: #e74c3c; font-weight: bold; }
+        .highlight-pos { color: #27ae60; font-weight: bold; }
+        .highlight-neg { color: #2980b9; font-weight: bold; }
+        .time-badge { font-size: 11px; color: #7f8c8d; display: block; font-weight: normal; margin-top: 2px; }
+        .na-cell { color: #aaa; font-style: italic; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>肌力訓練阻力 ＆ 心跳率同步分析系統 (雙 Y 軸統一固定 -60 ~ 200)</h2>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <label>1. 選擇 心跳率 CSV 檔案 (定義時間起點 0)</label>
+            <input type="file" id="hrFile" accept=".csv">
+        </div>
+        <div class="control-group">
+            <label>2. 選擇 肌力 Excel 檔案 (.xlsx / .xls)</label>
+            <input type="file" id="excelFile" accept=".xlsx, .xls">
+        </div>
+        <div class="control-group">
+            <label>3. 切換檢視設備</label>
+            <select id="sheetSelect" onchange="processCombinedData()">
+                <option value="">請先上傳上方雙檔案...</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>4. 同步基準起始時間 (自動抓取心跳最早時間)</label>
+            <input type="datetime-local" id="startTime" step="1">
+        </div>
+        <div class="control-group">
+            <label>5. 設定結束時間 (選填)</label>
+            <input type="datetime-local" id="endTime" step="1">
+        </div>
+    </div>
+
+    <div class="nav-buttons">
+        <button style="background-color: #34495e;" onclick="processCombinedData()">🔄 更新數據/套用時間區間</button>
+        <button class="nav-btn" onclick="moveWindow(-300)">◀ 微調後退 300 秒</button>
+        <button class="nav-btn" onclick="moveWindow(300)">微調前進 300 秒 ▶</button>
+        <button id="zoomToggleBtn" class="zoom-toggle-btn" onclick="toggleZoomMode()">🔒 縮放功能：已鎖定</button>
+        <button style="background-color: #e74c3c;" onclick="resetZoom()">全視角回歸 (呈現完整數據)</button>
+    </div>
+
+    <div id="infoBox">請依序上傳「心跳率 CSV 檔案」與「肌力 Excel 檔案」以開始同步分析。</div>
+
+    <div class="chart-container">
+        <canvas id="strengthChart"></canvas>
+    </div>
+
+    <div class="analysis-section">
+        <h3 class="analysis-title">📊 各動作「精確運動區間」心跳與肌力對比分析表 (自動去除非運動安靜期)</h3>
+        <div id="analysisTablesContainer"></div>
+    </div>
+</div>
+
+<script>
+let chartInstance = null;
+let currentXMin = null;
+let currentXMax = null;
+let maxDataSeconds = 200;
+let isZoomEnabled = false;
+
+let currentWorkbook = null;
+let heartRateRawData = [];
+let globalAbsoluteStartTime = null;
+
+const deviceColors = {
+    "lsw01": { border: "#e67e22", background: "rgba(230, 126, 34, 0.1)" },
+    "lsw02": { border: "#9b59b6", background: "rgba(155, 89, 182, 0.1)" },
+    "lsw03": { border: "#3498db", background: "rgba(52, 152, 219, 0.1)" },
+    "lsw05": { border: "#1abc9c", background: "rgba(26, 188, 156, 0.1)" },
+    "lsw06": { border: "#27ae60", background: "rgba(39, 174, 96, 0.1)" },
+    "lsw07": { border: "#f1c40f", background: "rgba(241, 196, 15, 0.1)" }
+};
+
+function getRandomColor() {
+    const r = Math.floor(Math.random() * 180);
+    const g = Math.floor(Math.random() * 180);
+    const b = Math.floor(Math.random() * 180);
+    return { border: `rgb(${r},${g},${b})`, background: `rgba(${r},${g},${b},0.05)` };
+}
+
+// Linear regression slope
+function calculateSlope(points) {
+    if (points.length < 2) return null; // FIX: return null instead of 0 so we can distinguish "no data"
+    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+    const n = points.length;
+    for (let i = 0; i < n; i++) {
+        sumX  += points[i].x;
+        sumY  += points[i].y;
+        sumXY += points[i].x * points[i].y;
+        sumXX += points[i].x * points[i].x;
+    }
+    const denom = n * sumXX - sumX * sumX;
+    if (denom === 0) return 0;
+    return (n * sumXY - sumX * sumY) / denom;
+}
+
+// FIX: Separate stats function that always works on raw values passed in.
+// For negative-direction forces the caller passes absolute values explicitly.
+function getStats(values) {
+    if (!values || values.length === 0) return null; // FIX: null signals "no data"
+    const sum = values.reduce((a, b) => a + b, 0);
+    return {
+        max: Math.max(...values),
+        min: Math.min(...values),
+        avg: sum / values.length
+    };
+}
+
+// HR CSV loader
+document.getElementById('hrFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+            heartRateRawData = results.data;
+            let earliestTime = Infinity;
+            heartRateRawData.forEach(row => {
+                let timeVal = row['心率時間'] || row['Time'] || row['time'];
+                if (timeVal) {
+                    const d = new Date(timeVal.replace(/"/g, '').trim());
+                    if (!isNaN(d.getTime()) && d.getTime() < earliestTime) earliestTime = d.getTime();
+                }
+            });
+            if (earliestTime === Infinity) { alert("心跳率檔案中未偵測到有效的「心率時間」欄位！"); return; }
+            globalAbsoluteStartTime = earliestTime;
+            const tz = new Date().getTimezoneOffset() * 60000;
+            document.getElementById('startTime').value = new Date(globalAbsoluteStartTime - tz).toISOString().slice(0, 19);
+            document.getElementById('endTime').value   = new Date(globalAbsoluteStartTime + 3600000 - tz).toISOString().slice(0, 19);
+            updateStatusText();
+            if (currentWorkbook) processCombinedData();
+        }
+    });
+});
+
+// Excel loader
+document.getElementById('excelFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        currentWorkbook = XLSX.read(data, { type: 'array' });
+        const sel = document.getElementById('sheetSelect');
+        sel.innerHTML = "";
+        const allOpt = document.createElement('option');
+        allOpt.value = "ALL_SHEETS";
+        allOpt.text  = "✨ 預設顯示全部肌力設備 (依時間序) ✨";
+        sel.appendChild(allOpt);
+        currentWorkbook.SheetNames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name; opt.text = name;
+            sel.appendChild(opt);
+        });
+        updateStatusText();
+        if (globalAbsoluteStartTime) processCombinedData();
+    };
+    reader.readAsArrayBuffer(file);
+});
+
+function updateStatusText() {
+    document.getElementById('infoBox').innerText =
+        `❤️ 心跳率狀態：${globalAbsoluteStartTime ? '已載入基準時間軸' : '尚未選取檔案'}\n` +
+        `💪 肌力 Excel 狀態：${currentWorkbook ? `已載入 (${currentWorkbook.SheetNames.length} 個分頁)` : '尚未選取檔案'}`;
+}
+
+function processCombinedData() {
+    if (!globalAbsoluteStartTime || !currentWorkbook) {
+        alert("請確認已同時成功上傳「心跳率 CSV」與「肌力 Excel」兩個檔案！");
+        return;
+    }
+
+    const selectedTarget = document.getElementById('sheetSelect').value || "ALL_SHEETS";
+    const startTimeInput  = document.getElementById('startTime').value;
+    const endTimeInput    = document.getElementById('endTime').value;
+    const baseStartTime   = startTimeInput ? new Date(startTimeInput).getTime() : globalAbsoluteStartTime;
+    const baseEndTime     = endTimeInput   ? new Date(endTimeInput).getTime()   : Infinity;
+
+    const finalDatasets = [];
+    let localMaxSec = 200;
+
+    // --- 1. Heart-rate dataset ---
+    const hrPoints = [];
+    heartRateRawData.forEach(row => {
+        const timeVal = row['心率時間'] || row['Time'] || row['time'];
+        const hrVal   = row['心跳率(次/分鐘)'] || row['心跳率'] || row['HeartRate'];
+        if (!timeVal || !hrVal) return;
+        const rowTime = new Date(timeVal.replace(/"/g, '').trim()).getTime();
+        if (isNaN(rowTime) || rowTime < baseStartTime || rowTime > baseEndTime) return;
+        const sec = Math.floor((rowTime - baseStartTime) / 1000);
+        if (sec < 0) return;
+        const hr = parseFloat(hrVal);
+        if (!isNaN(hr)) {
+            hrPoints.push({ x: sec, y: hr });
+            if (sec > localMaxSec) localMaxSec = sec;
+        }
+    });
+    hrPoints.sort((a, b) => a.x - b.x);
+
+    if (hrPoints.length > 0) {
+        finalDatasets.push({
+            label: "❤️ 心跳率 (次/分鐘) [右軸]",
+            data: hrPoints,
+            borderColor: "#ff4d4d",
+            backgroundColor: "rgba(255,77,77,0.03)",
+            borderWidth: 2.5,
+            pointRadius: 2,
+            tension: 0.2,
+            yAxisID: 'y_hr',
+            showLine: true
+        });
+    }
+
+    const analysisResults = [];
+
+    // --- 2. Strength datasets ---
+    const sheetsToProcess = (selectedTarget === "ALL_SHEETS") ? currentWorkbook.SheetNames : [selectedTarget];
+
+    sheetsToProcess.forEach(sheetName => {
+        const worksheet = currentWorkbook.Sheets[sheetName];
+        const jsonData  = XLSX.utils.sheet_to_json(worksheet, { range: 1 });
+
+        const secAggregator = {};
+        let detectedPart = "未知動作";
+
+        // FIX: Store raw points with absolute value + direction flag separately,
+        // so stats and slope calculations never mix positive/negative frames.
+        const rawPoints = []; // { x: sec, absVal: number, isPositive: bool }
+
+        jsonData.forEach(row => {
+            const cleanRow = {};
+            Object.keys(row).forEach(k => cleanRow[k.trim()] = row[k] ? row[k].toString().trim() : "");
+            if (!cleanRow['Time']) return;
+            const rowTime = new Date(cleanRow['Time']).getTime();
+            if (isNaN(rowTime) || rowTime < baseStartTime || rowTime > baseEndTime) return;
+            if (cleanRow['Part']) detectedPart = cleanRow['Part'];
+
+            const sec = Math.floor((rowTime - baseStartTime) / 1000);
+            if (sec < 0) return;
+
+            let strength = parseFloat(cleanRow['Strength（KGF）'] || cleanRow['Strength']);
+            if (isNaN(strength)) strength = 0;
+
+            const path = (cleanRow['Path'] || '').toLowerCase();
+            // FIX: direction logic unchanged from original
+            let isPositive = true;
+            if (path.includes('legpress')) {
+                if (path.includes('negative')) isPositive = false;
+            } else if (
+                path.includes('curl') || path.includes('latpulldown') ||
+                path.includes('crunch') || path.includes('adduction') ||
+                path.includes('rowing')
+            ) {
+                isPositive = false;
+            }
+
+            // FIX: store absolute value; apply sign only for chart aggregation
+            const absVal = Math.abs(strength);
+            rawPoints.push({ x: sec, absVal, isPositive });
+
+            // Chart aggregation: positive up, negative down
+            const signedVal = isPositive ? absVal : -absVal;
+            if (!secAggregator[sec]) secAggregator[sec] = { sum: 0, count: 0 };
+            secAggregator[sec].sum   += signedVal;
+            secAggregator[sec].count += 1;
+            if (sec > localMaxSec) localMaxSec = sec;
+        });
+
+        const chartPoints = [];
+        const sortedSeconds = Object.keys(secAggregator).map(Number).sort((a, b) => a - b);
+        sortedSeconds.forEach(sec => {
+            chartPoints.push({ x: sec, y: secAggregator[sec].sum / secAggregator[sec].count });
+        });
+
+        // --- Gap detection: split exercise bouts by >30s gaps ---
+        if (sortedSeconds.length > 0) {
+            const groups = [];
+            let currentGroup = [sortedSeconds[0]];
+            for (let i = 1; i < sortedSeconds.length; i++) {
+                if (sortedSeconds[i] - sortedSeconds[i - 1] > 30) {
+                    groups.push(currentGroup);
+                    currentGroup = [];
+                }
+                currentGroup.push(sortedSeconds[i]);
+            }
+            if (currentGroup.length > 0) groups.push(currentGroup);
+
+            // FIX: Do NOT fall back to g1 data when g2 doesn't exist.
+            // Instead, pass null to signal "no second bout".
+            const g1 = groups[0] || null;
+            const g2 = groups[1] || null; // null means no second exercise bout detected
+
+            const calculatePeriodMetrics = (group) => {
+                // FIX: Return a clearly marked "empty" object when group is null
+                if (!group || group.length === 0) return null;
+
+                const start = group[0];
+                const end   = group[group.length - 1];
+
+                // HR within this exact window
+                const periodHR  = hrPoints.filter(p => p.x >= start && p.x <= end);
+                const hrVals    = periodHR.map(p => p.y);
+                const hrStats   = getStats(hrVals);          // may be null if no HR data in window
+                const hrSlope   = calculateSlope(periodHR);  // null if <2 points
+
+                // Positive-direction force
+                const posRaw    = rawPoints.filter(p => p.x >= start && p.x <= end && p.isPositive);
+                // FIX: use absVal directly — no sign confusion
+                const posForSlope = posRaw.map(p => ({ x: p.x, y: p.absVal }));
+                const posVals   = posRaw.map(p => p.absVal);
+                const posStats  = getStats(posVals);
+                const posSlope  = calculateSlope(posForSlope);
+
+                // Negative-direction force
+                const negRaw    = rawPoints.filter(p => p.x >= start && p.x <= end && !p.isPositive);
+                // FIX: slope computed on positive absolute values (trend of effort magnitude),
+                // then negated so a rising eccentric load still shows as a positive slope.
+                const negForSlope = negRaw.map(p => ({ x: p.x, y: p.absVal }));
+                const negVals   = negRaw.map(p => p.absVal);
+                const negStats  = getStats(negVals);         // stats on absolute values
+                const negSlope  = calculateSlope(negForSlope); // slope of absolute eccentric force
+
+                return { start, end, hrSlope, hrStats, posSlope, posStats, negSlope, negStats };
+            };
+
+            analysisResults.push({
+                sheetName,
+                part: detectedPart,
+                p1: calculatePeriodMetrics(g1),
+                p2: calculatePeriodMetrics(g2) // may be null
+            });
+        }
+
+        if (chartPoints.length > 0) {
+            const lowerKey = sheetName.toLowerCase();
+            let color = getRandomColor();
+            for (const key in deviceColors) {
+                if (lowerKey.includes(key)) { color = deviceColors[key]; break; }
+            }
+            finalDatasets.push({
+                label: `💪 ${sheetName} (${detectedPart}) [左軸]`,
+                data: chartPoints,
+                borderColor: color.border,
+                backgroundColor: color.background,
+                borderWidth: 2,
+                pointRadius: 2,
+                tension: 0.1,
+                yAxisID: 'y_strength',
+                showLine: true
+            });
+        }
+    });
+
+    document.getElementById('infoBox').innerText =
+        `📊 時間軸同步對齊成功！\n[折線圖 0 秒] 對應之真實起點為：${new Date(baseStartTime).toLocaleString()}\n目前圖表包含：${finalDatasets.length} 組對齊數據。`;
+
+    isZoomEnabled = false;
+    const btn = document.getElementById('zoomToggleBtn');
+    btn.innerText = "🔒 縮放功能：已鎖定";
+    btn.classList.remove('zoom-active');
+
+    maxDataSeconds = localMaxSec + 50;
+    currentXMin = 0;
+    currentXMax = maxDataSeconds;
+
+    renderChart(finalDatasets);
+    renderAnalysisTables(analysisResults);
+}
+
+function renderAnalysisTables(results) {
+    const container = document.getElementById('analysisTablesContainer');
+    container.innerHTML = "";
+
+    if (results.length === 0) {
+        container.innerHTML = "<p style='color:#7f8c8d;'>暫無對期分析數據，請確保已成功加載檔案。</p>";
+        return;
+    }
+
+    // FIX: unified formatter — handles null (no data) and number (show 2dp)
+    const fmt = (v) => {
+        if (v === null || v === undefined || isNaN(v) || !isFinite(v)) {
+            return `<span class="na-cell">—</span>`;
+        }
+        return v.toFixed(2);
+    };
+
+    // Helper to extract a named stat safely from a metrics object
+    const hr  = (m, key) => m && m.hrStats  ? fmt(m.hrStats[key])  : `<span class="na-cell">—</span>`;
+    const pos = (m, key) => m && m.posStats  ? fmt(m.posStats[key]) : `<span class="na-cell">—</span>`;
+    const neg = (m, key) => m && m.negStats  ? fmt(m.negStats[key]) : `<span class="na-cell">—</span>`;
+    const sl  = (m, key) => m               ? fmt(m[key])           : `<span class="na-cell">—</span>`;
+
+    // Header label for each period column
+    const periodHeader = (m, label) => {
+        if (!m) return `${label}<span class="time-badge">（本次未偵測到運動區間）</span>`;
+        return `${label}<span class="time-badge">運動時間: ${m.start}s ~ ${m.end}s (共 ${m.end - m.start} 秒)</span>`;
+    };
+
+    results.forEach(res => {
+        const card = document.createElement('div');
+        card.className = "device-card";
+        card.innerHTML = `
+            <h4>設備分頁：${res.sheetName} — 動作部位：${res.part}</h4>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>分析指標項目</th>
+                        <th class="highlight-hr">${periodHeader(res.p1, '第一次運動區間')}</th>
+                        <th class="highlight-hr">${periodHeader(res.p2, '第二次運動區間')}</th>
+                        <th>指標含意說明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><b>❤️ 心跳率斜率</b></td>
+                        <td style="background-color:#fdf2f2;font-weight:bold;">${sl(res.p1,'hrSlope')}</td>
+                        <td style="background-color:#fdf2f2;font-weight:bold;">${sl(res.p2,'hrSlope')}</td>
+                        <td>純運動出力期間內，心跳率上升或下降的趨勢速度</td>
+                    </tr>
+                    <tr>
+                        <td><b>最高心跳率 (bpm)</b></td>
+                        <td>${hr(res.p1,'max')}</td>
+                        <td>${hr(res.p2,'max')}</td>
+                        <td>該動作真正進行時偵測到的最高心跳</td>
+                    </tr>
+                    <tr>
+                        <td><b>最低心跳率 (bpm)</b></td>
+                        <td>${hr(res.p1,'min')}</td>
+                        <td>${hr(res.p2,'min')}</td>
+                        <td>該動作真正進行時偵測到的最低心跳</td>
+                    </tr>
+                    <tr>
+                        <td><b>平均心跳速率 (bpm)</b></td>
+                        <td>${hr(res.p1,'avg')}</td>
+                        <td>${hr(res.p2,'avg')}</td>
+                        <td>去除安靜休息期後的純運動心跳均值</td>
+                    </tr>
+                    <tr style="border-top:2px solid #bdc3c7;">
+                        <td class="highlight-pos"><b>💪 正向肌力斜率</b></td>
+                        <td>${sl(res.p1,'posSlope')}</td>
+                        <td>${sl(res.p2,'posSlope')}</td>
+                        <td>向心階段阻力增長速度</td>
+                    </tr>
+                    <tr>
+                        <td class="highlight-pos"><b>正向最大值 (KGF)</b></td>
+                        <td>${pos(res.p1,'max')}</td>
+                        <td>${pos(res.p2,'max')}</td>
+                        <td>正向出力的峰值阻力</td>
+                    </tr>
+                    <tr>
+                        <td class="highlight-pos"><b>正向最小值 (KGF)</b></td>
+                        <td>${pos(res.p1,'min')}</td>
+                        <td>${pos(res.p2,'min')}</td>
+                        <td>正向出力的最低啟動阻力</td>
+                    </tr>
+                    <tr>
+                        <td class="highlight-pos"><b>正向平均值 (KGF)</b></td>
+                        <td>${pos(res.p1,'avg')}</td>
+                        <td>${pos(res.p2,'avg')}</td>
+                        <td>向心作功的平均負載力道</td>
+                    </tr>
+                    <tr style="border-top:2px solid #bdc3c7;">
+                        <td class="highlight-neg"><b>💪 負向肌力斜率</b></td>
+                        <td>${sl(res.p1,'negSlope')}</td>
+                        <td>${sl(res.p2,'negSlope')}</td>
+                        <td>離心控制階段的阻力趨勢斜率（絕對出力增長方向）</td>
+                    </tr>
+                    <tr>
+                        <td class="highlight-neg"><b>負向最大值 (KGF)</b></td>
+                        <td>${neg(res.p1,'max')}</td>
+                        <td>${neg(res.p2,'max')}</td>
+                        <td>離心階段能承托的最大絕對阻力</td>
+                    </tr>
+                    <tr>
+                        <td class="highlight-neg"><b>負向最小值 (KGF)</b></td>
+                        <td>${neg(res.p1,'min')}</td>
+                        <td>${neg(res.p2,'min')}</td>
+                        <td>離心階段的最低絕對阻力</td>
+                    </tr>
+                    <tr>
+                        <td class="highlight-neg"><b>負向平均值 (KGF)</b></td>
+                        <td>${neg(res.p1,'avg')}</td>
+                        <td>${neg(res.p2,'avg')}</td>
+                        <td>離心反向抗阻階段的平均控制力道</td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function renderChart(datasets) {
+    const ctx = document.getElementById('strengthChart').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'linear',
+                    title: { display: true, text: '同步時間 (相對秒) [ 心跳率起點 = 0 秒 ]', font: { weight: 'bold', size: 14 } },
+                    min: currentXMin,
+                    max: currentXMax
+                },
+                y_strength: {
+                    type: 'linear',
+                    position: 'left',
+                    min: -60, max: 200,
+                    title: { display: true, text: '💪 阻力值 Strength (KGF) [左軸]', font: { weight: 'bold', size: 13 }, color: '#2c3e50' },
+                    grid: {
+                        color: ctx => ctx.tick.value === 0 ? '#e74c3c' : 'rgba(0,0,0,0.06)',
+                        lineWidth: ctx => ctx.tick.value === 0 ? 2.5 : 1
+                    },
+                    ticks: { color: '#2c3e50', stepSize: 20 }
+                },
+                y_hr: {
+                    type: 'linear',
+                    position: 'right',
+                    min: -60, max: 200,
+                    title: { display: true, text: '❤️ 心跳率 (次/分鐘, bpm) [右軸]', font: { weight: 'bold', size: 13 }, color: '#ff4d4d' },
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#ff4d4d', stepSize: 20 }
+                }
+            },
+            plugins: {
+                legend: { position: 'top', labels: { boxWidth: 15, font: { weight: 'bold' } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            let label = ctx.dataset.label || '';
+                            if (label) label += ': ';
+                            if (ctx.parsed.y !== null) label += ctx.parsed.y.toFixed(4);
+                            return label;
+                        }
+                    }
+                },
+                zoom: {
+                    zoom: {
+                        wheel: { enabled: isZoomEnabled },
+                        pinch: { enabled: isZoomEnabled },
+                        mode: 'x',
+                        limits: { x: { minRange: 5 } },
+                        onZoomComplete: ({ chart }) => { currentXMin = chart.scales.x.min; currentXMax = chart.scales.x.max; }
+                    },
+                    pan: {
+                        enabled: isZoomEnabled,
+                        mode: 'x',
+                        onPanComplete: ({ chart }) => { currentXMin = chart.scales.x.min; currentXMax = chart.scales.x.max; }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function toggleZoomMode() {
+    if (!chartInstance) return;
+    isZoomEnabled = !isZoomEnabled;
+    const btn = document.getElementById('zoomToggleBtn');
+    if (isZoomEnabled) { btn.innerText = "🔓 縮放功能：已啟用"; btn.classList.add('zoom-active'); }
+    else               { btn.innerText = "🔒 縮放功能：已鎖定"; btn.classList.remove('zoom-active'); }
+    chartInstance.options.plugins.zoom.zoom.wheel.enabled = isZoomEnabled;
+    chartInstance.options.plugins.zoom.zoom.pinch.enabled = isZoomEnabled;
+    chartInstance.options.plugins.zoom.pan.enabled        = isZoomEnabled;
+    chartInstance.update();
+}
+
+function moveWindow(delta) {
+    if (!chartInstance) return;
+    currentXMin += delta;
+    currentXMax += delta;
+    if (currentXMin < 0) { currentXMax -= currentXMin; currentXMin = 0; }
+    chartInstance.options.scales.x.min = currentXMin;
+    chartInstance.options.scales.x.max = currentXMax;
+    chartInstance.update();
+}
+
+function resetZoom() {
+    if (!chartInstance) return;
+    currentXMin = 0; currentXMax = maxDataSeconds;
+    chartInstance.options.scales.x.min = currentXMin;
+    chartInstance.options.scales.x.max = currentXMax;
+    chartInstance.update();
+}
+</script>
+</body>
+</html>
