@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>肌力阻力 ＆ 心跳率同步分析系統 (隱藏休息時段 / 直接滾輪縮放版)</title>
+    <title>肌力阻力 ＆ 心跳率同步分析系統 (隱藏休息時段 / 直接滾輪縮放版 + 檢測紀錄/HRR)</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -90,6 +90,19 @@
             margin-bottom: 15px;
             white-space: pre-line;
         }
+        /* NEW: 受測者基本資料橫幅 */
+        #personInfoBox {
+            display: none;
+            margin-bottom: 15px;
+            font-size: 15px;
+            color: #1a5276;
+            background: #eaf2f8;
+            padding: 12px 16px;
+            border-left: 4px solid #2e86c1;
+            border-radius: 4px;
+            line-height: 1.8;
+        }
+        #personInfoBox .pi-tag { color:#7f8c8d; font-size:12px; margin-left:6px; }
         .analysis-section { margin-top: 30px; }
         .analysis-title {
             color: #2c3e50;
@@ -146,11 +159,13 @@
         .time-badge { font-size: 11px; color: #7f8c8d; display: block; font-weight: normal; margin-top: 2px; }
         .na-cell { color: #aaa; font-style: italic; }
         .col-delta { background-color: #fefaf2; }
+        .ref-row td { background-color: #f7fbfd; }
+        .hrr-pct { color:#c0392b; font-weight:bold; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h2>肌力訓練阻力 ＆ 心跳率同步分析系統 (隱藏休息時段 / 直接滾輪縮放)</h2>
+    <h2>肌力訓練阻力 ＆ 心跳率同步分析系統 (隱藏休息時段 / 直接滾輪縮放 ＋ 檢測紀錄/儲備心率)</h2>
 
     <div class="control-panel">
         <div class="control-group">
@@ -160,6 +175,10 @@
         <div class="control-group">
             <label>2. 選擇 肌力 Excel 檔案 (.xlsx / .xls)</label>
             <input type="file" id="excelFile" accept=".xlsx, .xls">
+        </div>
+        <div class="control-group">
+            <label>2-1. 上傳 安靜心跳/最大等速肌力 檢測紀錄 Excel</label>
+            <input type="file" id="testRecordFile" accept=".xlsx, .xls">
         </div>
         <div class="control-group">
             <label>3. 切換檢視設備</label>
@@ -198,9 +217,12 @@
             📌 <b>方向定義</b>：<span class="highlight-pos">往外出力 ＝ 正向（綠）</span>、<span class="highlight-neg">往內收力 ＝ 負向（藍）</span>，動作名稱已依各設備實際動作標示（例：前踢後勾 → 前踢 / 後勾）。<br>
             📈 <b>變化量 Δ%</b> = (第二次 − 第一次) ÷ |第一次| × 100；
             <b>變化方向</b>門檻：當 (第二次 − 第一次) ≥ 第一次 × 5% 顯示 <span style="color:#27ae60;font-weight:bold;">▲ 上升</span>，否則顯示 <span style="color:#2980b9;font-weight:bold;">▼ 衰減</span>。<br>
-            🏹 折線圖會在<b>每一次動作（第一次與第二次都有）</b>各自標出 ❤️心跳 與 💪肌力 的 <span style="color:#27ae60;font-weight:bold;">▲ 上升</span> / <span style="color:#2980b9;font-weight:bold;">▼ 衰減</span> 箭頭；<b>每次獨立判定</b>（依該次動作區間內的斜率，非與另一次相比），標籤為該次區間內的趨勢幅度 %。<br>
-            ✂️ 開啟「隱藏休息時段」後，>30 秒的休息空檔會壓縮成 <span style="color:#7f8c8d;font-weight:bold;">⏭ 略過</span> 細帶，讓第一次與第二次動作直接靠近對照（X 軸刻度與滑鼠提示仍顯示原始秒數）。
+            🏹 折線圖會在「第二次運動區間」位置，依上述同一套方向邏輯標出 ❤️心跳 與 💪肌力 的趨勢箭頭。<br>
+            ✂️ 開啟「隱藏休息時段」後，>30 秒的休息空檔會壓縮成 <span style="color:#7f8c8d;font-weight:bold;">⏭ 略過</span> 細帶，讓第一次與第二次動作直接靠近對照（X 軸刻度與滑鼠提示仍顯示原始秒數）。<br>
+            🫀 <b>儲備心率 HRR%</b>＝(最高心跳率 − 安靜心跳率) ÷ (220 − 年齡 − 安靜心跳率) × 100，顯示於「最高心跳率」括號內（需匯入檢測紀錄 Excel）；該列 Δ% 以「第一次 HRR%」為基準與第二次比較。<br>
+            📋 <b>檢測基準值</b>（🛌 安靜心率、🏋️ 最大肌力）取自匯入的「安靜心跳/最大等速肌力檢測紀錄」，兩次區間顯示同一值、Δ 欄標示「基準值」。
         </p>
+        <div id="personInfoBox"></div>
         <div id="analysisTablesContainer"></div>
     </div>
 </div>
@@ -221,14 +243,21 @@ let currentXMin = null;
 let currentXMax = null;
 let maxDataSeconds = 200;
 let isZoomEnabled = false;
-let hideGaps = false;              // NEW: 是否隱藏休息時段
-let timeSegments = null;           // NEW: 時間壓縮分段（null = 不壓縮）
+let hideGaps = false;              // 是否隱藏休息時段
+let timeSegments = null;           // 時間壓縮分段（null = 不壓縮）
 
 let currentWorkbook = null;
 let heartRateRawData = [];
 let globalAbsoluteStartTime = null;
 
 let chartArrows = [];
+
+// ===== NEW: 檢測紀錄（安靜心跳 / 最大等速肌力） =====
+let testRecordWorkbook = null;
+let testRecordByDevice = {};   // 'lsw1' -> {gender,birthday,age,restingHR,maxStrength,_sheet}
+let testRecordList = [];       // 依分頁順序的所有解析結果（無 lsw 鍵時用名稱/順序對應）
+let testRecordPerson = null;   // {gender,birthday,age}  受測者層級資料
+let globalRestingHR = null;    // 全域第一個有效安靜心率（某分頁缺值時回退使用）
 
 const deviceColors = {
     "lsw01": { border: "#e67e22", background: "rgba(230, 126, 34, 0.1)" },
@@ -310,88 +339,154 @@ function judgeDirection(v1, v2) {
     return { ok: true, up, pct, delta };
 }
 
-// ===== NEW: 時間壓縮（隱藏休息時段）工具 =====
-// 將運動秒數合併為「運動區間」，相鄰間隔 <= mergeGap 視為同一區間
-function buildActiveIntervals(secs, mergeGap) {
-    if (!secs || secs.length === 0) return [];
-    const s = [...new Set(secs)].sort((a, b) => a - b);
-    const intervals = [];
-    let start = s[0], prev = s[0];
-    for (let i = 1; i < s.length; i++) {
-        if (s[i] - prev > mergeGap) { intervals.push([start, prev]); start = s[i]; }
-        prev = s[i];
+// ===== NEW: 檢測紀錄解析工具 =====
+function normTxt(s) {
+    return (s == null ? '' : String(s)).trim().toLowerCase().replace(/[\s:：，,()（）.\-_/\\]/g, '');
+}
+function toNum(v) {
+    if (v == null) return null;
+    const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+    return isNaN(n) ? null : n;
+}
+function formatBirthday(v) {
+    if (v == null || v === '') return null;
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        if (y > 1900 && y < 2100) {
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const da = String(d.getDate()).padStart(2, '0');
+            return `${y}-${mo}-${da}`;
+        }
     }
-    intervals.push([start, prev]);
-    return intervals;
+    return String(v).trim();
+}
+function ageFromBirthday(b) {
+    if (!b) return null;
+    const d = new Date(b);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    let a = now.getFullYear() - d.getFullYear();
+    const m = now.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) a--;
+    return a;
+}
+// 從分頁名擷取設備鍵（lsw01 / lsw1 皆正規化為 lsw1），用來對應肌力分頁
+function deviceKey(name) {
+    const m = String(name).toLowerCase().match(/lsw\s*0*(\d+)/);
+    return m ? ('lsw' + parseInt(m[1], 10)) : null;
 }
 
-// 建立「原始秒 → 壓縮秒」分段表
-// 中間休息 > idleKeep → 壓縮成 gapWidth；頭尾休息 > idleKeep → 壓縮成更小的 edgePad（讓兩組動作貼近且填滿畫面）
-function buildTimeMapping(intervals, dataMin, dataMax, opts) {
-    const idleKeep = opts.idleKeep, gapWidth = opts.gapWidth, edgePad = opts.edgePad;
-    const segs = [];
-    let comp = 0;
-    // kind: 'active' | 'gapMid'(兩組之間) | 'gapEdge'(頭尾)
-    const push = (oStart, oEnd, kind) => {
-        if (oEnd < oStart) oEnd = oStart;
-        const oLen = oEnd - oStart;
-        let cLen = oLen, collapsed = false;
-        if (kind === 'gapMid'  && oLen > idleKeep) { cLen = gapWidth; collapsed = true; }
-        if (kind === 'gapEdge' && oLen > idleKeep) { cLen = edgePad;  collapsed = true; }
-        segs.push({ oStart, oEnd, cStart: comp, cEnd: comp + cLen, isGap: collapsed, skipped: oLen });
-        comp += cLen;
+const FIELD_KEYS = {
+    gender:      ['性別', 'gender', 'sex'],
+    birthday:    ['出生日', '出生日期', '生日', 'birthday', 'birthdate', 'dob', 'dateofbirth'],
+    age:         ['年齡', '年龄', 'age'],
+    restingHR:   ['安靜心跳率', '安靜心率', '靜止心率', '安静心率', 'restingheartrate', 'restinghr', 'restingheart', 'resting', 'rhr'],
+    maxStrength: ['最大力量', '最大肌力', '最大等速肌力', '最大等速', 'maxstrength', 'maxforce', 'maxkgf', 'peaktorque']
+};
+
+function sheetToAOA(ws) {
+    return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+}
+
+// 任一欄位標籤集合（用來判斷「右鄰是否其實是另一個表頭」→ 橫式表格）
+const ALL_FIELD_KEYS = Object.values(FIELD_KEYS).flat().map(normTxt);
+function isFieldLabel(v) {
+    const n = normTxt(v);
+    return !!n && ALL_FIELD_KEYS.some(k => n.includes(k));
+}
+
+// 在 2D 陣列中尋找欄位值：
+//  1) 同格 "標籤：值"
+//  2) 直式鍵值：右鄰非空且本身不是欄位標籤 → 取右鄰
+//  3) 橫式表頭：右鄰是欄位標籤（或右鄰為空）→ 往下找同欄第一個非標籤的非空值
+function findFieldValue(aoa, keys) {
+    const normKeys = keys.map(normTxt);
+    for (let r = 0; r < aoa.length; r++) {
+        const row = aoa[r] || [];
+        for (let c = 0; c < row.length; c++) {
+            const cellNorm = normTxt(row[c]);
+            if (!cellNorm) continue;
+            if (!normKeys.some(k => cellNorm.includes(k))) continue;
+
+            // 1) 同格內 "標籤：值"
+            const rawCell = String(row[c]);
+            const colonSplit = rawCell.split(/[:：]/);
+            if (colonSplit.length > 1 && colonSplit.slice(1).join(':').trim() !== '') {
+                return colonSplit.slice(1).join(':').trim();
+            }
+
+            // 2) 右鄰（最多看兩格）：非空且不是另一個欄位標籤 → 直式鍵值
+            let rightIsLabel = false;
+            for (let rc = c + 1; rc <= c + 2; rc++) {
+                const rv = row[rc];
+                if (rv == null || String(rv).trim() === '') continue;
+                if (isFieldLabel(rv)) { rightIsLabel = true; break; }
+                return String(rv).trim();
+            }
+
+            // 3) 往下找同欄第一個「非空且非欄位標籤」的值（橫式表頭，或直式但值在下一列）
+            for (let dr = 1; dr <= 4; dr++) {
+                const dv = (aoa[r + dr] || [])[c];
+                if (dv == null || String(dv).trim() === '') continue;
+                if (isFieldLabel(dv)) continue;
+                return String(dv).trim();
+            }
+            // 找不到合理值就繼續掃下一個符合的標籤
+        }
+    }
+    return null;
+}
+
+function parseTestRecordSheet(ws) {
+    const aoa = sheetToAOA(ws);
+    const genderRaw   = findFieldValue(aoa, FIELD_KEYS.gender);
+    const birthdayRaw = findFieldValue(aoa, FIELD_KEYS.birthday);
+    const ageRaw      = findFieldValue(aoa, FIELD_KEYS.age);
+    const rhrRaw      = findFieldValue(aoa, FIELD_KEYS.restingHR);
+    const maxRaw      = findFieldValue(aoa, FIELD_KEYS.maxStrength);
+
+    const birthday = formatBirthday(birthdayRaw);
+    let age = toNum(ageRaw);
+    if ((age == null || isNaN(age)) && birthday) age = ageFromBirthday(birthday);
+
+    return {
+        gender:      genderRaw ? String(genderRaw).trim() : null,
+        birthday:    birthday || null,
+        age:         (age == null || isNaN(age)) ? null : age,
+        restingHR:   toNum(rhrRaw),
+        maxStrength: toNum(maxRaw)
     };
-    let cursor = dataMin;
-    intervals.forEach(([s, e], i) => {
-        if (s > cursor) push(cursor, s, i === 0 ? 'gapEdge' : 'gapMid'); // 第一組前=頭部休息
-        push(Math.max(s, cursor), e, 'active');                          // 運動區間（1:1）
-        cursor = Math.max(cursor, e);
-    });
-    if (dataMax > cursor) push(cursor, dataMax, 'gapEdge');              // 尾端休息
-    return segs;
 }
 
-// NEW: 在「被壓縮的休息空檔」處把折線斷開，避免一條斜線橫跨空檔（讓兩組成為清楚的獨立群組）
-function insertLineBreaks(points, segs, origGapThreshold) {
-    const sorted = points.slice().sort((a, b) => a.o - b.o);
-    const out = [];
-    for (let i = 0; i < sorted.length; i++) {
-        if (i > 0 && (sorted[i].o - sorted[i - 1].o) > origGapThreshold) {
-            out.push({ x: (sorted[i].x + sorted[i - 1].x) / 2, y: null, o: (sorted[i].o + sorted[i - 1].o) / 2 });
-        }
-        out.push(sorted[i]);
+// 依肌力分頁名稱找出對應的檢測紀錄
+function lookupTestRecord(strengthSheetName) {
+    const k = deviceKey(strengthSheetName);
+    if (k && testRecordByDevice[k]) return testRecordByDevice[k];
+    // 退而求其次：正規化後完全相同的分頁名
+    const target = normTxt(strengthSheetName);
+    for (const rec of testRecordList) {
+        if (normTxt(rec._sheet) === target) return rec;
     }
-    return out;
+    return null;
 }
 
-function mapSec(segs, sec) {
-    if (!segs || segs.length === 0) return sec;
-    if (sec <= segs[0].oStart) return segs[0].cStart;
-    const last = segs[segs.length - 1];
-    if (sec >= last.oEnd) return last.cEnd;
-    for (const g of segs) {
-        if (sec >= g.oStart && sec <= g.oEnd) {
-            const oLen = g.oEnd - g.oStart;
-            if (oLen === 0) return g.cStart;
-            return g.cStart + ((sec - g.oStart) / oLen) * (g.cEnd - g.cStart);
-        }
-    }
-    return last.cEnd;
+// 儲備心率 HRR%
+function computeHRR(periodMaxHR, restingHR, age) {
+    if (periodMaxHR == null || restingHR == null || age == null) return null;
+    const denom = (220 - age - restingHR);
+    if (denom <= 0) return null;
+    return (periodMaxHR - restingHR) / denom * 100;
 }
 
-function invMap(segs, comp) {
-    if (!segs || segs.length === 0) return comp;
-    if (comp <= segs[0].cStart) return segs[0].oStart;
-    const last = segs[segs.length - 1];
-    if (comp >= last.cEnd) return last.oEnd;
-    for (const g of segs) {
-        if (comp >= g.cStart && comp <= g.cEnd) {
-            const cLen = g.cEnd - g.cStart;
-            if (cLen === 0) return g.oStart;
-            return g.oStart + ((comp - g.cStart) / cLen) * (g.oEnd - g.oStart);
-        }
-    }
-    return last.oEnd;
+function renderPersonInfo() {
+    const box = document.getElementById('personInfoBox');
+    if (!testRecordPerson) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    const p = testRecordPerson;
+    box.style.display = 'block';
+    box.innerHTML =
+        `👤 <b>受測者基本資料</b>　｜　性別：<b>${p.gender || '—'}</b>　｜　出生日：<b>${p.birthday || '—'}</b>　｜　年齡：<b>${p.age != null ? p.age + ' 歲' : '—'}</b>` +
+        (globalRestingHR != null ? `<span class="pi-tag">（全域安靜心率參考：${globalRestingHR} bpm）</span>` : '');
 }
 
 // HR CSV loader
@@ -422,7 +517,7 @@ document.getElementById('hrFile').addEventListener('change', function(e) {
     });
 });
 
-// Excel loader
+// Excel loader (肌力)
 document.getElementById('excelFile').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -447,10 +542,58 @@ document.getElementById('excelFile').addEventListener('change', function(e) {
     reader.readAsArrayBuffer(file);
 });
 
+// ===== NEW: 檢測紀錄 Excel loader =====
+document.getElementById('testRecordFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        const data = new Uint8Array(ev.target.result);
+        testRecordWorkbook = XLSX.read(data, { type: 'array', cellDates: true });
+
+        testRecordByDevice = {};
+        testRecordList = [];
+        testRecordPerson = null;
+        globalRestingHR = null;
+
+        testRecordWorkbook.SheetNames.forEach(sn => {
+            const rec = parseTestRecordSheet(testRecordWorkbook.Sheets[sn]);
+            rec._sheet = sn;
+            testRecordList.push(rec);
+
+            const k = deviceKey(sn);
+            if (k) testRecordByDevice[k] = rec;
+
+            if (globalRestingHR == null && rec.restingHR != null) globalRestingHR = rec.restingHR;
+
+            if (!testRecordPerson && (rec.gender || rec.birthday || rec.age != null)) {
+                testRecordPerson = { gender: rec.gender, birthday: rec.birthday, age: rec.age };
+            }
+        });
+
+        // 補齊受測者層級缺漏（從其他分頁找）
+        if (testRecordPerson) {
+            testRecordList.forEach(rec => {
+                if (!testRecordPerson.gender && rec.gender) testRecordPerson.gender = rec.gender;
+                if (!testRecordPerson.birthday && rec.birthday) testRecordPerson.birthday = rec.birthday;
+                if (testRecordPerson.age == null && rec.age != null) testRecordPerson.age = rec.age;
+            });
+        }
+
+        console.log('檢測紀錄解析結果：', { person: testRecordPerson, globalRestingHR, byDevice: testRecordByDevice, list: testRecordList });
+
+        updateStatusText();
+        renderPersonInfo();
+        if (globalAbsoluteStartTime && currentWorkbook) processCombinedData();
+    };
+    reader.readAsArrayBuffer(file);
+});
+
 function updateStatusText() {
     document.getElementById('infoBox').innerText =
         `❤️ 心跳率狀態：${globalAbsoluteStartTime ? '已載入基準時間軸' : '尚未選取檔案'}\n` +
-        `💪 肌力 Excel 狀態：${currentWorkbook ? `已載入 (${currentWorkbook.SheetNames.length} 個分頁)` : '尚未選取檔案'}`;
+        `💪 肌力 Excel 狀態：${currentWorkbook ? `已載入 (${currentWorkbook.SheetNames.length} 個分頁)` : '尚未選取檔案'}\n` +
+        `📋 檢測紀錄狀態：${testRecordWorkbook ? `已載入 (${testRecordWorkbook.SheetNames.length} 個分頁；對應到 ${Object.keys(testRecordByDevice).length} 個設備)` : '尚未選取檔案（安靜心率/最大肌力/HRR 將顯示為 —）'}`;
 }
 
 function processCombinedData() {
@@ -467,7 +610,7 @@ function processCombinedData() {
 
     const finalDatasets = [];
     let localMaxSec = 200;
-    const allActiveSecs = []; // NEW: 收集所有運動秒數，供時間壓縮使用
+    const allActiveSecs = []; // 收集所有運動秒數，供時間壓縮使用
 
     // --- 1. Heart-rate dataset ---
     const hrPoints = [];
@@ -559,7 +702,7 @@ function processCombinedData() {
         const sortedSeconds = Object.keys(secAggregator).map(Number).sort((a, b) => a - b);
         sortedSeconds.forEach(sec => {
             chartPoints.push({ x: sec, y: secAggregator[sec].sum / secAggregator[sec].count });
-            allActiveSecs.push(sec); // NEW
+            allActiveSecs.push(sec);
         });
 
         const moveNames  = getMovementNames(detectedPart, detectedPath);
@@ -569,6 +712,12 @@ function processCombinedData() {
         for (const key in deviceColors) {
             if (lowerKey.includes(key)) { chosenColor = deviceColors[key]; break; }
         }
+
+        // ===== NEW: 對應檢測紀錄（安靜心率 / 最大肌力 / 年齡） =====
+        const tr = lookupTestRecord(sheetName);
+        const restingHR = (tr && tr.restingHR != null) ? tr.restingHR : globalRestingHR;
+        const ageVal    = (tr && tr.age != null) ? tr.age : (testRecordPerson ? testRecordPerson.age : null);
+        const maxStrengthTest = tr ? tr.maxStrength : null;
 
         if (sortedSeconds.length > 0) {
             const groups = [];
@@ -617,6 +766,11 @@ function processCombinedData() {
                 negName: moveNames.neg,
                 primaryDir,
                 color: chosenColor.border,
+                // NEW: 檢測基準值
+                restingHR,
+                ageVal,
+                maxStrengthTest,
+                trMatched: !!tr,
                 p1: calculatePeriodMetrics(g1),
                 p2: calculatePeriodMetrics(g2)
             });
@@ -637,38 +791,26 @@ function processCombinedData() {
         }
     });
 
-    // ===== 方向箭頭（每次動作「各自獨立」判定：依該次區間內的斜率） =====
-    // 第一次、第二次都各畫一支 ❤️心跳 與 💪肌力 箭頭
-    // 上升/衰減 = 該次區間斜率 >= 0 ? ▲上升 : ▼衰減；標籤 % = 斜率 × 該次秒數 ÷ |該次平均| × 100
+    // ===== 方向箭頭（以原始秒計算） =====
     chartArrows = [];
     analysisResults.forEach(res => {
+        if (!res.p1 || !res.p2) return;
+        const p2mid = (res.p2.start + res.p2.end) / 2;
+        if (res.p1.hrStats && res.p2.hrStats) {
+            const j = judgeDirection(res.p1.hrStats.avg, res.p2.hrStats.avg);
+            if (j.ok) chartArrows.push({ x: p2mid, yValue: res.p2.hrStats.avg, yAxisID: 'y_hr', up: j.up, pct: j.pct, color: '#ff4d4d' });
+        }
         const usePos = res.primaryDir === 'pos';
-        const sign   = usePos ? 1 : -1;
-
-        [res.p1, res.p2].forEach(per => {
-            if (!per) return;
-            const xMid = (per.start + per.end) / 2;
-            const dur  = Math.max(1, per.end - per.start);
-
-            // ❤️ 心跳：依該次 hrSlope
-            if (per.hrStats && per.hrSlope !== null && per.hrSlope !== undefined) {
-                const avg = per.hrStats.avg;
-                const pct = (avg && isFinite(avg) && avg !== 0) ? (per.hrSlope * dur) / Math.abs(avg) * 100 : null;
-                chartArrows.push({ x: xMid, yValue: avg, yAxisID: 'y_hr', up: per.hrSlope >= 0, pct, color: '#ff4d4d' });
-            }
-
-            // 💪 肌力：依該次主要出力方向的斜率
-            const stats = usePos ? per.posStats : per.negStats;
-            const slope = usePos ? per.posSlope : per.negSlope;
-            if (stats && slope !== null && slope !== undefined) {
-                const avg = stats.avg;
-                const pct = (avg && isFinite(avg) && avg !== 0) ? (slope * dur) / Math.abs(avg) * 100 : null;
-                chartArrows.push({ x: xMid, yValue: sign * avg, yAxisID: 'y_strength', up: slope >= 0, pct, color: res.color });
-            }
-        });
+        const s1 = usePos ? res.p1.posStats : res.p1.negStats;
+        const s2 = usePos ? res.p2.posStats : res.p2.negStats;
+        const sign = usePos ? 1 : -1;
+        if (s1 && s2) {
+            const j = judgeDirection(s1.avg, s2.avg);
+            if (j.ok) chartArrows.push({ x: p2mid, yValue: sign * s2.avg, yAxisID: 'y_strength', up: j.up, pct: j.pct, color: res.color });
+        }
     });
 
-    // ===== NEW: 套用「隱藏休息時段」時間壓縮 =====
+    // ===== 套用「隱藏休息時段」時間壓縮 =====
     timeSegments = null;
     if (hideGaps && allActiveSecs.length > 0) {
         let dataMin = Infinity, dataMax = -Infinity;
@@ -681,9 +823,7 @@ function processCombinedData() {
         const intervals = buildActiveIntervals(allActiveSecs, 30);
         timeSegments = buildTimeMapping(intervals, dataMin, dataMax, { idleKeep: 8, gapWidth: 12, edgePad: 10 });
 
-        // 重新對位所有資料點與箭頭（保留原始秒於 o）
         finalDatasets.forEach(ds => ds.data.forEach(p => { p.o = p.x; p.x = mapSec(timeSegments, p.o); }));
-        // 肌力線在 >30s 空檔處斷線，避免斜線橫跨（心跳為連續資料不受影響）
         finalDatasets.forEach(ds => {
             if (ds.yAxisID === 'y_strength') {
                 ds.data = insertLineBreaks(ds.data, timeSegments, 30);
@@ -700,6 +840,7 @@ function processCombinedData() {
 
     document.getElementById('infoBox').innerText =
         `📊 時間軸同步對齊成功！\n[折線圖 0 秒] 對應之真實起點為：${new Date(baseStartTime).toLocaleString()}\n目前圖表包含：${finalDatasets.length} 組對齊數據。` +
+        (testRecordWorkbook ? `\n📋 檢測紀錄已套用（${analysisResults.filter(r=>r.trMatched).length}/${analysisResults.length} 個設備成功對應到檢測分頁）。` : ``) +
         (timeSegments ? `\n✂️ 已隱藏休息時段（>30s 空檔已壓縮，刻度仍為原始秒）。` : ``);
 
     isZoomEnabled = false;
@@ -714,9 +855,92 @@ function processCombinedData() {
     renderAnalysisTables(analysisResults);
 }
 
+// ===== 時間壓縮（隱藏休息時段）工具 =====
+function buildActiveIntervals(secs, mergeGap) {
+    if (!secs || secs.length === 0) return [];
+    const s = [...new Set(secs)].sort((a, b) => a - b);
+    const intervals = [];
+    let start = s[0], prev = s[0];
+    for (let i = 1; i < s.length; i++) {
+        if (s[i] - prev > mergeGap) { intervals.push([start, prev]); start = s[i]; }
+        prev = s[i];
+    }
+    intervals.push([start, prev]);
+    return intervals;
+}
+
+function buildTimeMapping(intervals, dataMin, dataMax, opts) {
+    const idleKeep = opts.idleKeep, gapWidth = opts.gapWidth, edgePad = opts.edgePad;
+    const segs = [];
+    let comp = 0;
+    const push = (oStart, oEnd, kind) => {
+        if (oEnd < oStart) oEnd = oStart;
+        const oLen = oEnd - oStart;
+        let cLen = oLen, collapsed = false;
+        if (kind === 'gapMid'  && oLen > idleKeep) { cLen = gapWidth; collapsed = true; }
+        if (kind === 'gapEdge' && oLen > idleKeep) { cLen = edgePad;  collapsed = true; }
+        segs.push({ oStart, oEnd, cStart: comp, cEnd: comp + cLen, isGap: collapsed, skipped: oLen });
+        comp += cLen;
+    };
+    let cursor = dataMin;
+    intervals.forEach(([s, e], i) => {
+        if (s > cursor) push(cursor, s, i === 0 ? 'gapEdge' : 'gapMid');
+        push(Math.max(s, cursor), e, 'active');
+        cursor = Math.max(cursor, e);
+    });
+    if (dataMax > cursor) push(cursor, dataMax, 'gapEdge');
+    return segs;
+}
+
+function insertLineBreaks(points, segs, origGapThreshold) {
+    const sorted = points.slice().sort((a, b) => a.o - b.o);
+    const out = [];
+    for (let i = 0; i < sorted.length; i++) {
+        if (i > 0 && (sorted[i].o - sorted[i - 1].o) > origGapThreshold) {
+            out.push({ x: (sorted[i].x + sorted[i - 1].x) / 2, y: null, o: (sorted[i].o + sorted[i - 1].o) / 2 });
+        }
+        out.push(sorted[i]);
+    }
+    return out;
+}
+
+function mapSec(segs, sec) {
+    if (!segs || segs.length === 0) return sec;
+    if (sec <= segs[0].oStart) return segs[0].cStart;
+    const last = segs[segs.length - 1];
+    if (sec >= last.oEnd) return last.cEnd;
+    for (const g of segs) {
+        if (sec >= g.oStart && sec <= g.oEnd) {
+            const oLen = g.oEnd - g.oStart;
+            if (oLen === 0) return g.cStart;
+            return g.cStart + ((sec - g.oStart) / oLen) * (g.cEnd - g.cStart);
+        }
+    }
+    return last.cEnd;
+}
+
+function invMap(segs, comp) {
+    if (!segs || segs.length === 0) return comp;
+    if (comp <= segs[0].cStart) return segs[0].oStart;
+    const last = segs[segs.length - 1];
+    if (comp >= last.cEnd) return last.oEnd;
+    for (const g of segs) {
+        if (comp >= g.cStart && comp <= g.cEnd) {
+            const cLen = g.cEnd - g.cStart;
+            if (cLen === 0) return g.oStart;
+            return g.oStart + ((comp - g.cStart) / cLen) * (g.oEnd - g.oStart);
+        }
+    }
+    return last.oEnd;
+}
+
 function cellVal(m, path) {
     const v = getVal(m, path);
     return v === null ? `<span class="na-cell">—</span>` : v.toFixed(2);
+}
+
+function fmtNum(v) {
+    return (v == null || isNaN(v)) ? `<span class="na-cell">—</span>` : Number(v).toFixed(2);
 }
 
 function deltaCells(p1, p2, path) {
@@ -734,19 +958,59 @@ function deltaCells(p1, p2, path) {
 }
 
 function buildRow(cfg, res) {
-    const v1 = cellVal(res.p1, cfg.path);
-    const v2 = cellVal(res.p2, cfg.path);
-    const d  = deltaCells(res.p1, res.p2, cfg.path);
+    let v1Html, v2Html, dPct, dDir;
+    const trClass  = cfg.kind === 'ref' ? ' class="ref-row"' : '';
     const trStyle  = cfg.topBorder ? ' style="border-top:2px solid #bdc3c7;"' : '';
     const tdClass  = cfg.tdClass ? ` class="${cfg.tdClass}"` : '';
     const valStyle = cfg.hrEmph ? ' style="background-color:#fdf2f2;font-weight:bold;"' : '';
+
+    if (cfg.kind === 'ref') {
+        // 檢測基準值：兩次區間相同，Δ 不計算
+        const val = res[cfg.resField];
+        v1Html = res.p1 ? fmtNum(val) : `<span class="na-cell">—</span>`;
+        v2Html = res.p2 ? fmtNum(val) : `<span class="na-cell">—</span>`;
+        dPct = `<span class="na-cell">—</span>`;
+        dDir = (val == null || isNaN(val))
+            ? `<span class="na-cell">未匯入</span>`
+            : `<span style="color:#7f8c8d;font-weight:bold;" title="此為檢測基準值，兩次區間相同">基準值</span>`;
+    } else if (cfg.kind === 'hrmax') {
+        // 最高心跳率 + 儲備心率 HRR%；Δ% 以第一次 HRR% 為基準
+        const hr1  = getVal(res.p1, 'hrStats.max');
+        const hr2  = getVal(res.p2, 'hrStats.max');
+        const hrr1 = computeHRR(hr1, res.restingHR, res.ageVal);
+        const hrr2 = computeHRR(hr2, res.restingHR, res.ageVal);
+        const tag = (v, hrr) => v == null
+            ? `<span class="na-cell">—</span>`
+            : `${v.toFixed(2)}${hrr != null ? ` <span class="hrr-pct">(${hrr.toFixed(0)}%)</span>` : ''}`;
+        v1Html = tag(hr1, hrr1);
+        v2Html = tag(hr2, hrr2);
+
+        const j = judgeDirection(hrr1, hrr2);
+        if (!j.ok) {
+            dPct = `<span class="na-cell">—</span>`;
+            dDir = `<span class="na-cell">—</span>`;
+        } else {
+            dPct = (j.pct === null || !isFinite(j.pct))
+                ? `<span class="na-cell">—</span>`
+                : `<span style="color:${j.pct >= 0 ? '#27ae60' : '#2980b9'};font-weight:bold;">${j.pct >= 0 ? '+' : ''}${j.pct.toFixed(2)}%</span>`;
+            dDir = j.up
+                ? `<span style="color:#27ae60;font-weight:bold;font-size:15px;">▲ 上升</span>`
+                : `<span style="color:#2980b9;font-weight:bold;font-size:15px;">▼ 衰減</span>`;
+        }
+    } else {
+        v1Html = cellVal(res.p1, cfg.path);
+        v2Html = cellVal(res.p2, cfg.path);
+        const d = deltaCells(res.p1, res.p2, cfg.path);
+        dPct = d.pct; dDir = d.dir;
+    }
+
     return `
-        <tr${trStyle}>
+        <tr${trClass}${trStyle}>
             <td${tdClass}>${cfg.label}</td>
-            <td${valStyle}>${v1}</td>
-            <td${valStyle}>${v2}</td>
-            <td class="col-delta">${d.pct}</td>
-            <td class="col-delta">${d.dir}</td>
+            <td${valStyle}>${v1Html}</td>
+            <td${valStyle}>${v2Html}</td>
+            <td class="col-delta">${dPct}</td>
+            <td class="col-delta">${dDir}</td>
             <td>${cfg.desc}</td>
         </tr>`;
 }
@@ -770,12 +1034,21 @@ function renderAnalysisTables(results) {
         const negName = res.negName;
 
         const rowConfigs = [
+            // 🛌 安靜心率（檢測基準）— HR 區段最上方
+            { label: '<b>🛌 安靜心率 (bpm) [檢測值]</b>', kind: 'ref', resField: 'restingHR',
+              desc: '由檢測紀錄匯入之安靜心跳率，為儲備心率(HRR)計算基準', hrEmph: true },
+
             { label: '<b>❤️ 心跳率斜率</b>',          path: 'hrSlope',     desc: '純運動出力期間內，心跳率上升或下降的趨勢速度', hrEmph: true },
-            { label: '<b>最高心跳率 (bpm)</b>',       path: 'hrStats.max', desc: '該動作真正進行時偵測到的最高心跳' },
+            { label: '<b>最高心跳率 (bpm) ＋ HRR%</b>', kind: 'hrmax',
+              desc: '括號內＝儲備心率 HRR%；公式 (最高心跳−安靜心跳)÷(220−年齡−安靜心跳)×100。Δ% 以第一次 HRR% 為基準與第二次比較', hrEmph: true },
             { label: '<b>最低心跳率 (bpm)</b>',       path: 'hrStats.min', desc: '該動作真正進行時偵測到的最低心跳' },
             { label: '<b>平均心跳速率 (bpm)</b>',     path: 'hrStats.avg', desc: '去除安靜休息期後的純運動心跳均值' },
 
-            { label: `<b>💪 ${posName} 肌力斜率</b>`, path: 'posSlope',     desc: '往外出力（向心）階段阻力增長速度', tdClass: 'highlight-pos', topBorder: true },
+            // 🏋️ 最大肌力（檢測基準）— 肌力區段最上方
+            { label: '<b>🏋️ 最大肌力 (KGF) [檢測值]</b>', kind: 'ref', resField: 'maxStrengthTest',
+              desc: '由檢測紀錄匯入之該設備最大等速肌力，作為肌力表現對照基準', tdClass: 'highlight-pos', topBorder: true },
+
+            { label: `<b>💪 ${posName} 肌力斜率</b>`, path: 'posSlope',     desc: '往外出力（向心）階段阻力增長速度', tdClass: 'highlight-pos' },
             { label: `<b>${posName} 最大值 (KGF)</b>`, path: 'posStats.max', desc: '往外出力的峰值阻力', tdClass: 'highlight-pos' },
             { label: `<b>${posName} 最小值 (KGF)</b>`, path: 'posStats.min', desc: '往外出力的最低啟動阻力', tdClass: 'highlight-pos' },
             { label: `<b>${posName} 平均值 (KGF)</b>`, path: 'posStats.avg', desc: '往外出力的平均負載力道', tdClass: 'highlight-pos' },
@@ -788,10 +1061,14 @@ function renderAnalysisTables(results) {
 
         const bodyRows = rowConfigs.map(c => buildRow(c, res)).join('');
 
+        const trBadge = res.trMatched
+            ? `<span class="time-badge" style="color:#16a085;">✓ 已對應檢測紀錄</span>`
+            : `<span class="time-badge" style="color:#e67e22;">⚠ 未對應檢測紀錄（安靜心率/最大肌力/HRR 顯示為 —）</span>`;
+
         const card = document.createElement('div');
         card.className = "device-card";
         card.innerHTML = `
-            <h4>設備分頁：${res.sheetName} — 動作部位：${res.part}　（往外：${posName}／往內：${negName}）</h4>
+            <h4>設備分頁：${res.sheetName} — 動作部位：${res.part}　（往外：${posName}／往內：${negName}）${trBadge}</h4>
             <table class="comparison-table">
                 <thead>
                     <tr>
@@ -865,7 +1142,6 @@ const arrowPlugin = {
     }
 };
 
-// NEW: 休息時段分隔線
 const gapSeparatorPlugin = {
     id: 'gapSeparators',
     afterDraw(chart) {
@@ -916,7 +1192,6 @@ function renderChart(datasets) {
                     min: currentXMin,
                     max: currentXMax,
                     ticks: {
-                        // NEW: 壓縮模式下，刻度標籤換回原始秒數
                         callback: function(value) {
                             if (timeSegments) return Math.round(invMap(timeSegments, value)) + 's';
                             return Math.round(value) + 's';
@@ -947,7 +1222,6 @@ function renderChart(datasets) {
                 legend: { position: 'top', labels: { boxWidth: 15, font: { weight: 'bold' } } },
                 tooltip: {
                     callbacks: {
-                        // NEW: 標題顯示原始秒數（壓縮模式下也正確）
                         title: function(items) {
                             if (!items.length) return '';
                             const raw = items[0].raw;
@@ -964,7 +1238,6 @@ function renderChart(datasets) {
                 },
                 zoom: {
                     zoom: {
-                        // FIX: 啟用後直接滾輪縮放（不需 Ctrl）
                         wheel: { enabled: isZoomEnabled, modifierKey: null, speed: 0.1 },
                         pinch: { enabled: isZoomEnabled },
                         drag:  { enabled: false },
@@ -991,13 +1264,12 @@ function toggleZoomMode() {
     else               { btn.innerText = "🔒 縮放功能：已鎖定"; btn.classList.remove('zoom-active'); }
     const z = chartInstance.options.plugins.zoom;
     z.zoom.wheel.enabled = isZoomEnabled;
-    z.zoom.wheel.modifierKey = null;   // 確保不需 Ctrl
+    z.zoom.wheel.modifierKey = null;
     z.zoom.pinch.enabled = isZoomEnabled;
     z.pan.enabled        = isZoomEnabled;
     chartInstance.update();
 }
 
-// NEW: 隱藏/顯示休息時段
 function toggleHideGaps() {
     hideGaps = !hideGaps;
     const b = document.getElementById('hideGapBtn');
