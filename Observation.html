@@ -220,7 +220,8 @@
             🏹 折線圖會在「第二次運動區間」位置，依上述同一套方向邏輯標出 ❤️心跳 與 💪肌力 的趨勢箭頭。<br>
             ✂️ 開啟「隱藏休息時段」後，>30 秒的休息空檔會壓縮成 <span style="color:#7f8c8d;font-weight:bold;">⏭ 略過</span> 細帶，讓第一次與第二次動作直接靠近對照（X 軸刻度與滑鼠提示仍顯示原始秒數）。<br>
             🫀 <b>儲備心率 HRR%</b>＝(最高心跳率 − 安靜心跳率) ÷ (220 − 年齡 − 安靜心跳率) × 100，顯示於「最高心跳率」括號內（需匯入檢測紀錄 Excel）；該列 Δ% 以「第一次 HRR%」為基準與第二次比較。<br>
-            📋 <b>檢測基準值</b>（🛌 安靜心率、🏋️ 最大肌力）取自匯入的「安靜心跳/最大等速肌力檢測紀錄」，兩次區間顯示同一值、Δ 欄標示「基準值」。
+            📋 <b>檢測基準值</b>（🛌 安靜心率、🏋️ 各方向最大力量）取自匯入的檢測紀錄；🏋️ 列為兩次區間相同之基準值。<br>
+            🆚 <b>各方向最大值 vs 檢測</b>：往外/往內的「最大值 (KGF)」格內顯示 <b>(檢測Δ ±%)</b>＝本次峰值相對該方向檢測最大力量的變化量（每次運動各自計算）；右側 Δ% 欄維持「第二次 vs 第一次」期間進步。各設備動作對照：LSW01 雙手前推/後拉、LSW02 雙腳前踢/勾回、LSW03 雙腳外展/內收、LSW05 雙手上推/下拉、LSW06 雙腳上蹬/下滑、LSW07 腹背上頂/下彎。
         </p>
         <div id="personInfoBox"></div>
         <div id="analysisTablesContainer"></div>
@@ -258,6 +259,7 @@ let testRecordByDevice = {};   // 'lsw1' -> {gender,birthday,age,restingHR,maxSt
 let testRecordList = [];       // 依分頁順序的所有解析結果（無 lsw 鍵時用名稱/順序對應）
 let testRecordPerson = null;   // {gender,birthday,age}  受測者層級資料
 let globalRestingHR = null;    // 全域第一個有效安靜心率（某分頁缺值時回退使用）
+let testMoveMaxByLabel = {};   // 跨所有分頁掃描：normTxt(動作名) -> 最大力量(KGF)
 
 const deviceColors = {
     "lsw01": { border: "#e67e22", background: "rgba(230, 126, 34, 0.1)" },
@@ -278,6 +280,17 @@ const MOVEMENT_MAP = {
     'crunch':       { pos: '伸展（外展）', neg: '捲腹（內收）' },
     'adduction':    { pos: '外展（外開）', neg: '內收（內夾）' },
     'rowing':       { pos: '回放（外展）', neg: '划船（內收）' }
+};
+
+// ===== NEW: 檢測紀錄各設備「往外(pos)/往內(neg)」對應的 Excel 動作名稱 =====
+//   圖表的「外展/前踢/往外出力」= pos，對應前者；「內收/後勾/往內收力」= neg，對應後者
+const TEST_MOVE_LABELS = {
+    'lsw1': { pos: '雙手前推', neg: '雙手後拉' },
+    'lsw2': { pos: '雙腳前踢', neg: '雙腳勾回' },
+    'lsw3': { pos: '雙腳外展', neg: '雙腳內收' },
+    'lsw5': { pos: '雙手上推', neg: '雙手下拉' },
+    'lsw6': { pos: '雙腳上蹬', neg: '雙腳下滑' },
+    'lsw7': { pos: '腹背上頂', neg: '腹背下彎' }
 };
 
 function getMovementNames(part, pathSample) {
@@ -471,6 +484,53 @@ function lookupTestRecord(strengthSheetName) {
     return null;
 }
 
+// ===== NEW: 依「動作名稱」抓該動作的最大力量(KGF) =====
+// 先找出「最大力量」表頭所在欄，取該動作列在此欄的值；失敗則退回找該動作標籤右側/下方第一個數字
+function findHeaderCol(aoa, keys) {
+    const nk = keys.map(normTxt);
+    for (let r = 0; r < aoa.length; r++) {
+        const row = aoa[r] || [];
+        for (let c = 0; c < row.length; c++) {
+            const cn = normTxt(row[c]);
+            if (cn && nk.some(k => cn.includes(k))) return { row: r, col: c };
+        }
+    }
+    return null;
+}
+function findRowOfLabel(aoa, label) {
+    const t = normTxt(label);
+    if (!t) return null;
+    for (let r = 0; r < aoa.length; r++) {
+        const row = aoa[r] || [];
+        for (let c = 0; c < row.length; c++) {
+            if (normTxt(row[c]).includes(t)) return { row: r, col: c };
+        }
+    }
+    return null;
+}
+function nearestNumber(aoa, r, c) {
+    const row = aoa[r] || [];
+    for (let cc = c + 1; cc < row.length; cc++) {
+        const n = toNum(row[cc]);
+        if (n != null) return n;
+    }
+    for (let dr = 1; dr <= 4; dr++) {
+        const n = toNum((aoa[r + dr] || [])[c]);
+        if (n != null) return n;
+    }
+    return null;
+}
+function extractMovementMax(aoa, movementLabel) {
+    const pos = findRowOfLabel(aoa, movementLabel);
+    if (!pos) return null;
+    const hdr = findHeaderCol(aoa, FIELD_KEYS.maxStrength);
+    if (hdr) {
+        const v = toNum((aoa[pos.row] || [])[hdr.col]);
+        if (v != null) return v;   // 動作列 ∩ 最大力量欄
+    }
+    return nearestNumber(aoa, pos.row, pos.col); // 退回：最靠近的數字
+}
+
 // 儲備心率 HRR%
 function computeHRR(periodMaxHR, restingHR, age) {
     if (periodMaxHR == null || restingHR == null || age == null) return null;
@@ -555,8 +615,15 @@ document.getElementById('testRecordFile').addEventListener('change', function(e)
         testRecordList = [];
         testRecordPerson = null;
         globalRestingHR = null;
+        testMoveMaxByLabel = {};
+
+        // 預先收集所有設備的動作名稱（往外/往內）
+        const ALL_MOVE_LABELS = [];
+        Object.values(TEST_MOVE_LABELS).forEach(o => { ALL_MOVE_LABELS.push(o.pos, o.neg); });
 
         testRecordWorkbook.SheetNames.forEach(sn => {
+            const aoa = sheetToAOA(testRecordWorkbook.Sheets[sn]);
+
             const rec = parseTestRecordSheet(testRecordWorkbook.Sheets[sn]);
             rec._sheet = sn;
             testRecordList.push(rec);
@@ -569,6 +636,14 @@ document.getElementById('testRecordFile').addEventListener('change', function(e)
             if (!testRecordPerson && (rec.gender || rec.birthday || rec.age != null)) {
                 testRecordPerson = { gender: rec.gender, birthday: rec.birthday, age: rec.age };
             }
+
+            // 跨分頁掃描每個動作名稱的最大力量(KGF)（相容「一設備一分頁」與「全部集中一張表」）
+            ALL_MOVE_LABELS.forEach(lbl => {
+                const nk = normTxt(lbl);
+                if (testMoveMaxByLabel[nk] != null) return;
+                const v = extractMovementMax(aoa, lbl);
+                if (v != null) testMoveMaxByLabel[nk] = v;
+            });
         });
 
         // 補齊受測者層級缺漏（從其他分頁找）
@@ -580,7 +655,7 @@ document.getElementById('testRecordFile').addEventListener('change', function(e)
             });
         }
 
-        console.log('檢測紀錄解析結果：', { person: testRecordPerson, globalRestingHR, byDevice: testRecordByDevice, list: testRecordList });
+        console.log('檢測紀錄解析結果：', { person: testRecordPerson, globalRestingHR, byDevice: testRecordByDevice, moveMaxByLabel: testMoveMaxByLabel, list: testRecordList });
 
         updateStatusText();
         renderPersonInfo();
@@ -593,7 +668,7 @@ function updateStatusText() {
     document.getElementById('infoBox').innerText =
         `❤️ 心跳率狀態：${globalAbsoluteStartTime ? '已載入基準時間軸' : '尚未選取檔案'}\n` +
         `💪 肌力 Excel 狀態：${currentWorkbook ? `已載入 (${currentWorkbook.SheetNames.length} 個分頁)` : '尚未選取檔案'}\n` +
-        `📋 檢測紀錄狀態：${testRecordWorkbook ? `已載入 (${testRecordWorkbook.SheetNames.length} 個分頁；對應到 ${Object.keys(testRecordByDevice).length} 個設備)` : '尚未選取檔案（安靜心率/最大肌力/HRR 將顯示為 —）'}`;
+        `📋 檢測紀錄狀態：${testRecordWorkbook ? `已載入 (${testRecordWorkbook.SheetNames.length} 個分頁；對應到 ${Object.keys(testRecordByDevice).length} 個設備、${Object.keys(testMoveMaxByLabel).length} 個動作最大力量)` : '尚未選取檔案（安靜心率/檢測最大力量/HRR 將顯示為 —）'}`;
 }
 
 function processCombinedData() {
@@ -713,11 +788,18 @@ function processCombinedData() {
             if (lowerKey.includes(key)) { chosenColor = deviceColors[key]; break; }
         }
 
-        // ===== NEW: 對應檢測紀錄（安靜心率 / 最大肌力 / 年齡） =====
+        // ===== NEW: 對應檢測紀錄（安靜心率 / 年齡 / 各方向最大力量） =====
         const tr = lookupTestRecord(sheetName);
         const restingHR = (tr && tr.restingHR != null) ? tr.restingHR : globalRestingHR;
         const ageVal    = (tr && tr.age != null) ? tr.age : (testRecordPerson ? testRecordPerson.age : null);
-        const maxStrengthTest = tr ? tr.maxStrength : null;
+
+        // 依設備鍵找出該設備往外(pos)/往內(neg)對應的 Excel 動作名稱與檢測最大力量
+        const dk = deviceKey(sheetName);
+        const lbl = dk ? TEST_MOVE_LABELS[dk] : null;
+        const posLabel = lbl ? lbl.pos : null;
+        const negLabel = lbl ? lbl.neg : null;
+        const maxStrengthPos = posLabel ? (testMoveMaxByLabel[normTxt(posLabel)] ?? null) : null;
+        const maxStrengthNeg = negLabel ? (testMoveMaxByLabel[normTxt(negLabel)] ?? null) : null;
 
         if (sortedSeconds.length > 0) {
             const groups = [];
@@ -766,11 +848,14 @@ function processCombinedData() {
                 negName: moveNames.neg,
                 primaryDir,
                 color: chosenColor.border,
-                // NEW: 檢測基準值
+                // NEW: 檢測基準值（各方向最大力量 + 安靜心率 + 年齡）
                 restingHR,
                 ageVal,
-                maxStrengthTest,
-                trMatched: !!tr,
+                maxStrengthPos,
+                maxStrengthNeg,
+                posLabel,
+                negLabel,
+                trMatched: (restingHR != null || maxStrengthPos != null || maxStrengthNeg != null),
                 p1: calculatePeriodMetrics(g1),
                 p2: calculatePeriodMetrics(g2)
             });
@@ -997,6 +1082,23 @@ function buildRow(cfg, res) {
                 ? `<span style="color:#27ae60;font-weight:bold;font-size:15px;">▲ 上升</span>`
                 : `<span style="color:#2980b9;font-weight:bold;font-size:15px;">▼ 衰減</span>`;
         }
+    } else if (cfg.kind === 'maxcmp') {
+        // 圖表「往外/往內」最大值 + 與檢測最大力量的變化量（格內，每次運動各自比較）
+        // Δ% 欄維持「第二次 vs 第一次」的期間進步
+        const ref = res[cfg.refField];           // 該方向的檢測最大力量
+        const m1  = getVal(res.p1, cfg.path);
+        const m2  = getVal(res.p2, cfg.path);
+        const cmp = (v) => {
+            if (v == null) return `<span class="na-cell">—</span>`;
+            if (ref == null || isNaN(ref) || Math.abs(ref) < 1e-9) return v.toFixed(2);
+            const pct = (v - ref) / Math.abs(ref) * 100;
+            const up = v >= ref;
+            return `${v.toFixed(2)} <span style="color:${pct >= 0 ? '#27ae60' : '#2980b9'};font-weight:bold;font-size:12px;">(檢測Δ ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% ${up ? '▲' : '▼'})</span>`;
+        };
+        v1Html = cmp(m1);
+        v2Html = cmp(m2);
+        const d = deltaCells(res.p1, res.p2, cfg.path); // 期間進步（第二次 vs 第一次）
+        dPct = d.pct; dDir = d.dir;
     } else {
         v1Html = cellVal(res.p1, cfg.path);
         v2Html = cellVal(res.p2, cfg.path);
@@ -1032,6 +1134,8 @@ function renderAnalysisTables(results) {
     results.forEach(res => {
         const posName = res.posName;
         const negName = res.negName;
+        const posTested = (res.posLabel ? `檢測：${res.posLabel}` : '檢測最大力量');
+        const negTested = (res.negLabel ? `檢測：${res.negLabel}` : '檢測最大力量');
 
         const rowConfigs = [
             // 🛌 安靜心率（檢測基準）— HR 區段最上方
@@ -1044,17 +1148,21 @@ function renderAnalysisTables(results) {
             { label: '<b>最低心跳率 (bpm)</b>',       path: 'hrStats.min', desc: '該動作真正進行時偵測到的最低心跳' },
             { label: '<b>平均心跳速率 (bpm)</b>',     path: 'hrStats.avg', desc: '去除安靜休息期後的純運動心跳均值' },
 
-            // 🏋️ 最大肌力（檢測基準）— 肌力區段最上方
-            { label: '<b>🏋️ 最大肌力 (KGF) [檢測值]</b>', kind: 'ref', resField: 'maxStrengthTest',
-              desc: '由檢測紀錄匯入之該設備最大等速肌力，作為肌力表現對照基準', tdClass: 'highlight-pos', topBorder: true },
-
+            // ===== 往外(pos) 方向：檢測最大力量 + 與圖表最大值比較 =====
+            { label: `<b>🏋️ ${posTested} 最大力量 (KGF)</b>`, kind: 'ref', resField: 'maxStrengthPos',
+              desc: `由檢測紀錄匯入之「${res.posLabel || posName}」最大等速肌力，作為往外出力對照基準`, tdClass: 'highlight-pos', topBorder: true },
             { label: `<b>💪 ${posName} 肌力斜率</b>`, path: 'posSlope',     desc: '往外出力（向心）階段阻力增長速度', tdClass: 'highlight-pos' },
-            { label: `<b>${posName} 最大值 (KGF)</b>`, path: 'posStats.max', desc: '往外出力的峰值阻力', tdClass: 'highlight-pos' },
+            { label: `<b>${posName} 最大值 (KGF) vs 檢測</b>`, kind: 'maxcmp', path: 'posStats.max', refField: 'maxStrengthPos',
+              desc: '格內 (檢測Δ)＝本次最大值相對「檢測最大力量」的變化量；右側 Δ%＝第二次 vs 第一次', tdClass: 'highlight-pos' },
             { label: `<b>${posName} 最小值 (KGF)</b>`, path: 'posStats.min', desc: '往外出力的最低啟動阻力', tdClass: 'highlight-pos' },
             { label: `<b>${posName} 平均值 (KGF)</b>`, path: 'posStats.avg', desc: '往外出力的平均負載力道', tdClass: 'highlight-pos' },
 
-            { label: `<b>💪 ${negName} 肌力斜率</b>`, path: 'negSlope',     desc: '往內收力（離心）階段的阻力趨勢斜率（絕對出力方向）', tdClass: 'highlight-neg', topBorder: true },
-            { label: `<b>${negName} 最大值 (KGF)</b>`, path: 'negStats.max', desc: '往內收力能承托的最大絕對阻力', tdClass: 'highlight-neg' },
+            // ===== 往內(neg) 方向：檢測最大力量 + 與圖表最大值比較 =====
+            { label: `<b>🏋️ ${negTested} 最大力量 (KGF)</b>`, kind: 'ref', resField: 'maxStrengthNeg',
+              desc: `由檢測紀錄匯入之「${res.negLabel || negName}」最大等速肌力，作為往內收力對照基準`, tdClass: 'highlight-neg', topBorder: true },
+            { label: `<b>💪 ${negName} 肌力斜率</b>`, path: 'negSlope',     desc: '往內收力（離心）階段的阻力趨勢斜率（絕對出力方向）', tdClass: 'highlight-neg' },
+            { label: `<b>${negName} 最大值 (KGF) vs 檢測</b>`, kind: 'maxcmp', path: 'negStats.max', refField: 'maxStrengthNeg',
+              desc: '格內 (檢測Δ)＝本次最大值相對「檢測最大力量」的變化量；右側 Δ%＝第二次 vs 第一次', tdClass: 'highlight-neg' },
             { label: `<b>${negName} 最小值 (KGF)</b>`, path: 'negStats.min', desc: '往內收力的最低絕對阻力', tdClass: 'highlight-neg' },
             { label: `<b>${negName} 平均值 (KGF)</b>`, path: 'negStats.avg', desc: '往內收力階段的平均控制力道', tdClass: 'highlight-neg' }
         ];
@@ -1062,8 +1170,8 @@ function renderAnalysisTables(results) {
         const bodyRows = rowConfigs.map(c => buildRow(c, res)).join('');
 
         const trBadge = res.trMatched
-            ? `<span class="time-badge" style="color:#16a085;">✓ 已對應檢測紀錄</span>`
-            : `<span class="time-badge" style="color:#e67e22;">⚠ 未對應檢測紀錄（安靜心率/最大肌力/HRR 顯示為 —）</span>`;
+            ? `<span class="time-badge" style="color:#16a085;">✓ 已對應檢測紀錄（往外：${res.posLabel || '—'}／往內：${res.negLabel || '—'}）</span>`
+            : `<span class="time-badge" style="color:#e67e22;">⚠ 未對應檢測紀錄（安靜心率/檢測最大力量/HRR 顯示為 —）</span>`;
 
         const card = document.createElement('div');
         card.className = "device-card";
